@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Referidos - Pizzería</title>
+<style>
+  body { font-family: Arial, sans-serif; background-color: #f7f7f7; margin:0; padding:0;}
+  header { background-color:#ff6f00; color:white; text-align:center; padding:15px; font-size:1.5em;}
+  main { padding:15px;}
+  input, button { width:100%; padding:8px; margin:5px 0; box-sizing:border-box;}
+  table { width:100%; border-collapse:collapse; margin-top:15px;}
+  th, td { border:1px solid #ccc; padding:8px; text-align:center;}
+  th { background-color:#ffcc80;}
+  .btn { cursor:pointer; background-color:#ff6f00; color:white; border:none; border-radius:5px;}
+  .btn:hover { background-color:#ff9800;}
+  .paid { background-color:#c8e6c9;}
+</style>
+</head>
+<body>
+
+<header>Sistema de Referidos - Pizzería</header>
+<main>
+
+<h2>Agregar Cliente / Referidor</h2>
+<input type="text" id="clienteNombre" placeholder="Nombre del cliente">
+<input type="text" id="clienteTelefono" placeholder="Teléfono">
+<input type="number" id="pizzasCompradas" placeholder="Pizzas compradas" min="0">
+<button class="btn" onclick="agregarCliente()">Agregar Cliente</button>
+
+<h2>Clientes Registrados</h2>
+<table id="clientesTabla">
+  <thead>
+    <tr>
+      <th>Nombre</th>
+      <th>Teléfono</th>
+      <th>Código</th>
+      <th>Referidor</th>
+      <th>Link Referido</th>
+      <th>Pizzas Compradas</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<h2>Pagos Listos</h2>
+<table id="pagosTabla">
+  <thead>
+    <tr>
+      <th>Referidor</th>
+      <th>Cliente activador</th>
+      <th>Monto</th>
+      <th>Fecha/Hora</th>
+      <th>Acción</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<h2>Historial de Pagos</h2>
+<table id="historialTabla">
+  <thead>
+    <tr>
+      <th>Referidor</th>
+      <th>Cliente activador</th>
+      <th>Monto</th>
+      <th>Fecha/Hora</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+</main>
+
+<script>
+let clientes = JSON.parse(localStorage.getItem('clientes')) || [];
+let pagos = JSON.parse(localStorage.getItem('pagos')) || [];
+let historial = JSON.parse(localStorage.getItem('historial')) || [];
+
+// Detectar referidor por URL
+const urlParams = new URLSearchParams(window.location.search);
+const codigoReferidorURL = urlParams.get('referidor');
+
+function generarCodigo() { return 'C' + Math.floor(Math.random()*1000000); }
+
+function guardarDatos() {
+  localStorage.setItem('clientes', JSON.stringify(clientes));
+  localStorage.setItem('pagos', JSON.stringify(pagos));
+  localStorage.setItem('historial', JSON.stringify(historial));
+  actualizarTablas();
+}
+
+function actualizarTablas() {
+  const tbody = document.querySelector('#clientesTabla tbody');
+  tbody.innerHTML = '';
+  clientes.forEach((c,i) => {
+    const link = `${window.location.pathname}?referidor=${c.codigo}`;
+    tbody.innerHTML += `
+      <tr>
+        <td>${c.nombre}</td>
+        <td>${c.telefono}</td>
+        <td>${c.codigo}</td>
+        <td>${c.referidorNombre || ''}</td>
+        <td><input type="text" value="${link}" readonly style="width:150px;" onclick="this.select()"></td>
+        <td>${c.pizzas}</td>
+        <td><button class="btn" onclick="eliminarCliente(${i})">Eliminar</button></td>
+      </tr>
+    `;
+  });
+
+  const pagosTbody = document.querySelector('#pagosTabla tbody');
+  pagosTbody.innerHTML = '';
+  pagos.forEach((p,i)=>{
+    pagosTbody.innerHTML += `
+      <tr>
+        <td>${p.referidor}</td>
+        <td>${p.activador}</td>
+        <td>${p.monto}</td>
+        <td>${p.fecha}</td>
+        <td><button class="btn" onclick="marcarPagado(${i})">Marcar Pagado</button></td>
+      </tr>`;
+  });
+
+  const histTbody = document.querySelector('#historialTabla tbody');
+  histTbody.innerHTML = '';
+  historial.forEach(h=>{
+    histTbody.innerHTML += `
+      <tr class="paid">
+        <td>${h.referidor}</td>
+        <td>${h.activador}</td>
+        <td>${h.monto}</td>
+        <td>${h.fecha}</td>
+      </tr>`;
+  });
+}
+
+function agregarCliente() {
+  const nombre = document.getElementById('clienteNombre').value.trim();
+  const telefono = document.getElementById('clienteTelefono').value.trim();
+  const pizzas = parseInt(document.getElementById('pizzasCompradas').value) || 0;
+  if(!nombre || !telefono) { alert('Ingrese nombre y teléfono'); return; }
+
+  const codigo = generarCodigo();
+  let referidorNombre = '';
+  let codigoReferidor = codigoReferidorURL || '';
+  if(codigoReferidor) {
+    const referidor = clientes.find(c => c.codigo === codigoReferidor);
+    if(referidor) referidorNombre = referidor.nombre;
+  }
+
+  clientes.push({nombre, telefono, codigo, referidorCodigo, referidorNombre, pizzas});
+  revisarPagos(nombre, codigo, referidorNombre);
+  guardarDatos();
+
+  document.getElementById('clienteNombre').value = '';
+  document.getElementById('clienteTelefono').value = '';
+  document.getElementById('pizzasCompradas').value = '';
+}
+
+function eliminarCliente(index){ clientes.splice(index,1); guardarDatos(); }
+
+function revisarPagos(nombreCliente, codigoCliente, referidorNombre){
+  if(!referidorNombre) return;
+  const referidor = clientes.find(c => c.nombre===referidorNombre);
+  if(!referidor || referidor.pizzas <1) return;
+
+  const referidos = clientes.filter(c => c.referidorNombre===referidorNombre);
+  if(referidos.length >=2){
+    const activador = referidos.find(c => c.pizzas >=2);
+    if(activador){
+      const yaExiste = pagos.some(p=>p.referidor===referidorNombre && p.activador===activador.nombre);
+      if(!yaExiste){
+        const fecha = new Date().toLocaleString();
+        pagos.push({referidor:referidorNombre, activador:activador.nombre, monto:1, fecha});
+      }
+    }
+  }
+}
+
+function marcarPagado(index){
+  const pago = pagos.splice(index,1)[0];
+  historial.push(pago);
+  guardarDatos();
+}
+
+actualizarTablas();
+</script>
+
+</body>
+</html>
